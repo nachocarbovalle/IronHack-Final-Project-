@@ -1,0 +1,36 @@
+# Data is never committed. Anyone cloning the repo runs download_data.py.
+data/raw/*
+!data/raw/.gitkeep
+!data/README.md
+
+# Models, indexes and experiment runs are build artefacts: the notebooks recreate them.
+models/*
+!models/.gitkeep
+*.joblib
+*.pkl
+*.safetensors
+chroma*/
+mlruns/
+mlflow.db
+
+# Keys. Never commit them.
+.env
+.streamlit/secrets.toml
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
