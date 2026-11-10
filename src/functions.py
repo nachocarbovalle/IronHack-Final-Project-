@@ -19,10 +19,18 @@ the ones for the other track, write your own.
 
 from pathlib import Path
 import json
+import re
 import time
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
+from openai import OpenAI
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from langdetect import DetectorFactory, detect
+from langdetect.lang_detect_exception import LangDetectException
+
+DetectorFactory.seed = 0      # langdetect is random by default: a fixed seed makes results reproducible
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -32,6 +40,14 @@ RANDOM_STATE = 42
 LLM_MODEL = "gpt-5.4-nano"                                    # LLM track: one place to change the model
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 STEAM_REVIEWS_URL = "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/"
+PRICE_PER_M_INPUT = 0.20     # USD per 1M input tokens, gpt-5.4-nano (OpenAI pricing, checked 2026-11-10)
+PRICE_PER_M_OUTPUT = 1.25    # USD per 1M output tokens; reasoning tokens are billed as output
+
+BASELINE_PROMPT = (
+    "You help PC players decide whether to buy a game by telling them how players have received it. "
+    "Answer from what you know about players' opinions of the game, in 3 to 5 sentences. "
+    "If you do not have reliable information to answer, say that you don't know instead of guessing."
+)
 
 
 # Data collection
@@ -199,15 +215,108 @@ def collect_all(games_csv, end_date, out_dir, **kwargs):
                      ignore_index=True)
 # Both tracks
 
-def load_reviews():
-    """Read the raw reviews (and, for Amazon, join the product metadata you need)."""
-    pass
+def load_reviews(folder=RAW / "steam_reviews"):
+    """Read the review snapshot: one parquet file per game, written by collect_all()."""
+    files = sorted(Path(folder).glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"No review files in {folder}. Run the collection first (see README).")
+    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+
+
+BBCODE_TAG = re.compile(
+    r"\[/?(?:h[1-3]|b|i|u|s|strike|spoiler|noparse|hr|list|olist|quote|code|table|tr|th|td|url)"
+    r"(?:=[^\]]*)?\]",
+    re.IGNORECASE,
+)
+LIST_ITEM = re.compile(r"\[\*\]")
+URL = re.compile(r"https?://\S+")
+QUOTES = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'})
 
 
 def clean_text(text):
-    """Remove HTML and extra whitespace. The app calls this too, on the user's input."""
-    pass
+    """Remove Steam markup and links, normalize quotes and whitespace, keep paragraph breaks.
+    The app calls this too, on the user's question."""
+    if not isinstance(text, str):
+        return ""
+    text = text.replace("\r\n", "\n")
+    text = LIST_ITEM.sub("- ", text)              # [*] list items become "- "
+    text = BBCODE_TAG.sub("", text)               # drop tags, keep the text inside them
+    text = URL.sub("", text)
+    text = text.translate(QUOTES)                 # curly quotes become straight ones
+    text = re.sub(r"([^\w\s])\1{3,}", r"\1\1\1", text)   # "......." → "...", "!!!!!!" → "!!!"
+    text = re.sub(r"[ \t]+", " ", text)           # runs of spaces become one space
+    text = re.sub(r" *\n *", "\n", text)          # no spaces around line breaks
+    text = re.sub(r"\n{3,}", "\n\n", text)        # at most one empty line between paragraphs
+    return text.strip()
 
+def prepare_reviews(reviews, min_words=5, min_letter_share=0.5, screen_english_share=0.3):
+    """Clean every text and drop the rows the assistant cannot use.
+    Returns the clean table and a log of how many rows each rule removed."""
+    df = reviews.copy()
+    df["text"] = df["text"].map(clean_text)
+    df["n_words"] = df["text"].str.split().str.len()
+    df["letter_share"] = df["text"].str.count(r"[A-Za-z]") / df["text"].str.len().replace(0, 1)
+    words = df["text"].str.lower().str.findall(r"[a-z']+")
+    df["english_share"] = words.map(lambda ws: sum(w in ENGLISH_STOP_WORDS for w in ws) / max(len(ws), 1))
+    df["edited"] = (df["updated"] - df["created"]) > pd.Timedelta(days=1)
+
+    log = []
+
+    mask = df["letter_share"] < min_letter_share
+    log.append(("Mostly non-Latin characters (other language, emoji, ASCII art)", int(mask.sum())))
+    df = df[~mask]
+
+    mask = df["n_words"] < min_words
+    log.append((f"Fewer than {min_words} words", int(mask.sum())))
+    df = df[~mask]
+
+    suspects = (df["n_words"] >= 20) & (df["english_share"] < screen_english_share)
+    df["language"] = "en"
+    df.loc[suspects, "language"] = df.loc[suspects, "text"].map(detect_language)
+    mask = df["language"] != "en"
+    log.append(("Not English (language detected on suspects with few English function words)", int(mask.sum())))
+    df = df[~mask]
+
+    mask = df["text"].str.lower().duplicated()
+    log.append(("Exact duplicate text (first copy kept)", int(mask.sum())))
+    df = df[~mask]
+
+    return df.reset_index(drop=True), pd.DataFrame(log, columns=["reason", "rows_removed"])
+
+def detect_language(text):
+    """Language code of the text's main language ("en", "es", "pt"…), or "unknown"."""
+    try:
+        return detect(text)
+    except LangDetectException:
+        return "unknown"
+
+def show_reviews(rows, n=3, chars=800):
+    """Print the first `n` reviews of a table in full (up to `chars` characters), with their context."""
+    for r in rows.head(n).itertuples():
+        verdict = "👍" if r.voted_up else "👎"
+        print(f"[{r.game}] {verdict} | {r.playtime_at_review_h:.0f} h | "
+              f"{r.created:%Y-%m-%d} | window {r.window} | id {r.review_id}")
+        print(r.text[:chars])
+        print("-" * 80)
+
+def find_sources(chunks, pattern, game=None, min_playtime=None, steam_deck=None, n=5):
+    """Chunks matching a regex, optionally filtered as a user would. Prints the count and n random hits."""
+    rows = chunks
+    if pd.notna(game):
+        rows = rows[rows["game"] == game]
+    if pd.notna(min_playtime):
+        rows = rows[rows["playtime_at_review_h"] >= min_playtime]
+    if pd.notna(steam_deck):
+        rows = rows[rows["steam_deck"] == steam_deck]
+    hits = rows[rows["text"].str.contains(pattern, case=False, regex=True)]
+    print(f"{len(hits)} matching chunks from {hits['review_id'].nunique()} reviews\n")
+    for r in hits.sample(min(n, len(hits)), random_state=RANDOM_STATE).itertuples():
+        verdict = "👍" if r.voted_up else "👎"
+        print(f"[{r.game}] {verdict} | {r.playtime_at_review_h:.0f} h | {r.created:%Y-%m-%d} | "
+              f"window {r.window} | review {r.review_id}")
+        print(r.text)
+        print("-" * 80)
+    return hits
 
 # Model track
 
@@ -222,6 +331,117 @@ def compare_models(models, X, y, cv, scoring):
 
 
 # LLM track
+def get_client():
+    """OpenAI client, with the API key read from the .env file at the repo root."""
+    load_dotenv(ROOT / ".env")
+    return OpenAI()
+
+
+def ask_llm(client, system_prompt, user_message, model=LLM_MODEL):
+    """One call to the LLM. Returns the answer with its tokens, cost and time."""
+    start = time.perf_counter()
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "system", "content": system_prompt},
+                  {"role": "user", "content": user_message}],
+    )
+    usage = response.usage
+    return {
+        "answer": response.choices[0].message.content,
+        "input_tokens": usage.prompt_tokens,
+        "output_tokens": usage.completion_tokens,
+        "cost_usd": (usage.prompt_tokens * PRICE_PER_M_INPUT
+                     + usage.completion_tokens * PRICE_PER_M_OUTPUT) / 1_000_000,
+        "seconds": round(time.perf_counter() - start, 2),
+    }
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def n_tokens(text, tokenizer):
+    """Number of tokens the embedding model sees in `text` (without its special tokens)."""
+    return len(tokenizer(text, add_special_tokens=False)["input_ids"])
+
+
+def split_long_paragraph(paragraph, tokenizer, max_tokens):
+    """Split a paragraph longer than `max_tokens` into sentences, then into word groups if needed."""
+    pieces, current = [], ""
+    for sentence in SENTENCE_END.split(paragraph):
+        candidate = f"{current} {sentence}".strip()
+        if n_tokens(candidate, tokenizer) <= max_tokens:
+            current = candidate
+            continue
+        if current:
+            pieces.append(current)
+        if n_tokens(sentence, tokenizer) <= max_tokens:
+            current = sentence
+        else:                                    # one giant sentence: cut it into word groups
+            group, group_tokens = [], 0
+            for word in sentence.split():
+                word_tokens = n_tokens(word, tokenizer)
+                if group and group_tokens + word_tokens > max_tokens:
+                    pieces.append(" ".join(group))
+                    group, group_tokens = [], 0
+                group.append(word)
+                group_tokens += word_tokens
+            if group:
+                pieces.append(" ".join(group))
+            current = ""
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def chunk_review(text, tokenizer, max_tokens=200):
+    """Split one review into chunks of at most `max_tokens`, following its paragraphs."""
+    if n_tokens(text, tokenizer) <= max_tokens:
+        return [text]                            # most reviews: a single chunk
+    pieces = []
+    for paragraph in (p.strip() for p in text.split("\n")):
+        if not paragraph:
+            continue
+        if n_tokens(paragraph, tokenizer) <= max_tokens:
+            pieces.append(paragraph)
+        else:
+            pieces.extend(split_long_paragraph(paragraph, tokenizer, max_tokens))
+
+    chunks, current = [], ""
+    for piece in pieces:                         # pack consecutive pieces up to the limit
+        candidate = f"{current}\n{piece}".strip()
+        if n_tokens(candidate, tokenizer) <= max_tokens:
+            current = candidate
+        else:
+            chunks.append(current)
+            current = piece
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def make_chunks(reviews, tokenizer, max_tokens=200):
+    """One row per chunk, with the metadata of its review."""
+    rows = []
+    for r in reviews.itertuples():
+        pieces = chunk_review(r.text, tokenizer, max_tokens)
+        for i, piece in enumerate(pieces):
+            rows.append({
+                "chunk_id": f"{r.review_id}-{i}",
+                "review_id": r.review_id,
+                "chunk_index": i,
+                "n_chunks": len(pieces),
+                "text": piece,
+                "game": r.game,
+                "app_id": r.app_id,
+                "voted_up": r.voted_up,
+                "created": r.created,
+                "window": r.window,
+                "playtime_at_review_h": r.playtime_at_review_h,
+                "edited": r.edited,
+                "votes_up": r.votes_up,
+                "votes_funny": r.votes_funny,
+                "steam_deck": r.steam_deck,
+                "gpu": r.gpu,
+            })
+    return pd.DataFrame(rows)
 
 def build_index(documents):
     """Embed the chunks and store them, with their metadata, in a Chroma collection."""

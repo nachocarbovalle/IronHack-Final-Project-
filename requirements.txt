@@ -20,6 +20,7 @@ pyarrow>=14          # reads the clothing parquet file
 streamlit>=1.40
 python-dotenv>=1.0
 requests>=2.31
+langdetect>=1.0.9
 
 # Model track
 sentence-transformers>=3.0
