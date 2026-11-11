@@ -43,6 +43,7 @@ RANDOM_STATE = 42
 LLM_MODEL = "gpt-5.4-nano"                                    # LLM track: one place to change the model
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 STEAM_REVIEWS_URL = "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/"
+STEAM_APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
 PRICE_PER_M_INPUT = 0.20     # USD per 1M input tokens, gpt-5.4-nano (OpenAI pricing, checked 2026-11-10)
 PRICE_PER_M_OUTPUT = 1.25    # USD per 1M output tokens; reasoning tokens are billed as output
 
@@ -230,6 +231,14 @@ def collect_all(games_csv, end_date, out_dir, **kwargs):
 
     return pd.concat([pd.read_parquet(p) for p in sorted(out_dir.glob("*.parquet"))],
                      ignore_index=True)
+
+def fetch_header_image(app_id):
+    """URL of the game's header image on its Steam store page, or None if unavailable."""
+    response = requests.get(STEAM_APPDETAILS_URL, params={"appids": app_id}, timeout=30)
+    response.raise_for_status()
+    entry = response.json().get(str(app_id), {})
+    return entry.get("data", {}).get("header_image") if entry.get("success") else None
+
 # Both tracks
 
 def load_reviews(folder=RAW / "steam_reviews"):

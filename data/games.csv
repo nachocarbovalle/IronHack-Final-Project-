@@ -1,24 +1,24 @@
-game,app_id,steam_release
-Crimson Desert,3321460,2026-03-19
-Baldur's Gate 3,1086940,2023-08-03
-Elden Ring,1245620,2022-02-25
-Cyberpunk 2077,1091500,2020-12-10
-Red Dead Redemption 2,1174180,2019-12-05
-Hollow Knight,367520,2017-02-24
-The Witcher 3: Wild Hunt,292030,2015-05-18
-Hades,1145360,2020-09-17
-The Elder Scrolls V: Skyrim Special Edition,489830,2016-10-28
-Sekiro: Shadows Die Twice,814380,2019-03-21
-Dark Souls: Remastered,570940,2018-05-24
-Borderlands 4,1285190,2025-09-11
-Dying Light,239140,2015-01-26
-Hogwarts Legacy,990080,2023-02-10
-God of War,1593500,2022-01-14
-Marvel's Spider-Man Remastered,1817070,2022-08-12
-Far Cry 6,2369390,2023-05-11
-007 First Light,3768760,2026-05-26
-Assassin's Creed Shadows,3159330,2025-03-20
-Lies of P,1627720,2023-09-18
-Fallout 4,377160,2015-11-10
-The Last of Us Part I,1888930,2023-03-28
-Ghost of Tsushima,2215430,2024-05-16
+game,app_id,steam_release,header_image
+Crimson Desert,3321460,2026-03-19,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3321460/236f3814be7a97d86831800691b6096d449222a8/header.jpg?t=1794275035
+Baldur's Gate 3,1086940,2023-08-03,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1086940/48a2fcbda8565bb45025e98fd8ebde8a7203f6a0/header.jpg?t=1777363040
+Elden Ring,1245620,2022-02-25,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1245620/header.jpg?t=1790290043
+Cyberpunk 2077,1091500,2020-12-10,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1091500/48a93d6445a67520ea49833c93dae8f2e68fc540/header_alt_assets_9.jpg?t=1792682505
+Red Dead Redemption 2,1174180,2019-12-05,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1174180/header.jpg?t=1759502961
+Hollow Knight,367520,2017-02-24,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/3c3489495136b26b34f8a9543c7f5645b99d388c/header.jpg?t=1776125684
+The Witcher 3: Wild Hunt,292030,2015-05-18,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/292030/4b5b1ba5061b8a992cc69ac58b4245434edb4296/header.jpg?t=1793900434
+Hades,1145360,2020-09-17,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1145360/header.jpg?t=1758127023
+The Elder Scrolls V: Skyrim Special Edition,489830,2016-10-28,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/489830/header.jpg?t=1786648247
+Sekiro: Shadows Die Twice,814380,2019-03-21,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/814380/header.jpg?t=1762888662
+Dark Souls: Remastered,570940,2018-05-24,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/570940/header.jpg?t=1778518110
+Borderlands 4,1285190,2025-09-11,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1285190/986a88d1b0e1420b00183def2a7034508353afa3/header.jpg?t=1793396913
+Dying Light,239140,2015-01-26,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/239140/9d1b810b85ae46a0acbdfddf583ccbb81271183e/header.jpg?t=1793627304
+Hogwarts Legacy,990080,2023-02-10,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/990080/be2971b1023bccb04f993887d70ef4d2060262cf/header.jpg?t=1790708992
+God of War,1593500,2022-01-14,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1593500/header.jpg?t=1763059412
+Marvel's Spider-Man Remastered,1817070,2022-08-12,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1817070/header.jpg?t=1787838689
+Far Cry 6,2369390,2023-05-11,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2369390/64af0c6b70ef233bbdff1e5ffe0e397481efb3c9/header.jpg?t=1793372616
+007 First Light,3768760,2026-05-26,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3768760/be65391533f072e79699be70ef2d47b7b2ac57ee/header_alt_assets_5.jpg?t=1793979129
+Assassin's Creed Shadows,3159330,2025-03-20,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3159330/header.jpg?t=1792778493
+Lies of P,1627720,2023-09-18,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1627720/header.jpg?t=1764565054
+Fallout 4,377160,2015-11-10,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/377160/header.jpg?t=1786648137
+The Last of Us Part I,1888930,2023-03-28,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1888930/header.jpg?t=1750959031
+Ghost of Tsushima,2215430,2024-05-16,https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2215430/header.jpg?t=1763409398

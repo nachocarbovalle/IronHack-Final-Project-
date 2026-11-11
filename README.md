@@ -1,256 +1,181 @@
-![Ironhack logo](https://user-images.githubusercontent.com/23629340/40541063-a07a0a8a-601a-11e8-91b5-2f13e4e6b441.png)
+# 🎮 Ask the Players
 
-# Project 3 | AI Product: From Model to Product
+**A RAG assistant that answers questions about PC games from Steam reviews, and shows the reviews it used.**
 
-*Data Science & Machine Learning — Week 9, the final project*
-
-Build a small AI product that someone could actually use. You will frame a problem, build either a trained NLP model or an LLM application, evaluate it honestly against a baseline, and put it in the hands of a user through a **Streamlit app** that you demo live.
-
-`Python` · `NLP` · `Transformers` · `Embeddings` · `LLM APIs` · `RAG` · `Agents` · `Evaluation` · `Streamlit` · `MLOps`
+Nacho Carbó · Ironhack Data Science & Machine Learning bootcamp · Project 3, "AI Product: From Model to Product" · November 2026
 
 ---
 
-## Overview
+## The user and the question
 
-This is the last project of the bootcamp, and the most open one. Weeks 7 and 8 gave you two ways to build with language: **train a model** (TF-IDF, embeddings, a fine-tuned transformer) or **build on an LLM** (prompts, RAG, tools). Project 3 asks you to pick one, take it all the way to a working app, and prove that it works.
+**The user** is a PC player deciding whether to buy a game, or wondering how it runs and plays today. Steam shows one score and thousands of unsorted reviews; finding the answer to one specific question ("Is it a good first roguelike?", "Does it still have performance problems?") means reading far too many of them.
 
-- **Format** — in pairs or on your own. Working in a pair, divide the work by stage (data, core, evaluation, app), not by person-per-notebook, and run each other's code every day.
-- **Duration** — launch on Friday of Week 8, 4 working days, presentations on Friday of Week 9.
-- **Tools** — Python, pandas, scikit-learn, sentence-transformers, Hugging Face `transformers`, the OpenAI API, LangChain (optional), Chroma, MLflow (optional), Streamlit, GitHub.
-- **Repository** — click **Use this template** at the top of this page to create your own repo.
+**The decision:** buy now, wait for a patch or a sale, or skip the game.
 
-### The goal
+**The product:** pick one of 23 games, ask a question, and get a short answer built only from real player reviews, with numbered references to the reviews it used, shown underneath so every claim can be checked. When the reviews cannot answer, it says so instead of guessing.
 
-Answer one question for one kind of user, with an AI component they can use: *Is this review a complaint? What do customers say about the battery? Which of my products have a quality problem?* By Friday you should be able to say what your product does, for whom, how well it works compared with a simple alternative, what it costs to run, and where it should not be trusted.
+## The track
 
-> [!IMPORTANT]
-> Choose your track, your data and your user on launch day, and stick with them. By Wednesday your evaluation is built around them; switching costs four days of work in two.
+**LLM track: retrieval-augmented generation (RAG).**
 
-<br>
+| Step | Choice |
+|---|---|
+| Documents | Cleaned Steam reviews, split along their paragraphs into chunks of up to 200 tokens (44,477 chunks) |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2`, normalized |
+| Index | Chroma, persisted on disk |
+| Retrieval | Top 5 chunks, filtered to the selected game |
+| Generation | `gpt-5.4-nano`, prompted to answer **only** from the retrieved reviews, cite them, say when evidence is limited, and refuse when the reviews do not answer |
 
-## Choose your track
+## The data
 
-Every project has **one AI core** and **one app**. You choose the core:
+- **Source:** Valve's public Steam review API (`IUserReviewsService/GetAppReviews`, no key needed), English reviews of purchased copies, collected on **10 November 2026**.
+- **23 games**, from Dying Light (2015) to 007 First Light (2026), listed in `data/games.csv`.
+- **Sampling:** each game's life on Steam is split into 5 equal time windows, with 200 reviews per window, sorted by helpfulness but **stratified by the window's real share of positive and negative reviews**. Sorting by helpfulness alone made the samples 11 to 30 points more negative than reality, because complaints are long and collect helpful votes.
+- **One row** is one review: its text, whether the player recommends the game, playtime at the time of the review, dates (created and last updated), votes and a few hardware flags. Steam account IDs are never stored.
+- **Cleaning:** 23,000 reviews collected → **22,707 kept**. Removed: 105 mostly non-Latin, 20 with fewer than 5 words, 116 in another language (a function-word screen, confirmed with `langdetect`), 52 exact duplicates. Steam markup, links and repeated symbols are stripped.
+- **Traps found:** Steam keeps only the latest version of an edited review (18.5% were edited); 13% of reviews mention another game of the corpus ("Dark Souls" is used as a genre word); the newest content is under-represented (only 16 chunks discuss a DLC released 12 days before collection).
 
-| | **Model track** | **LLM track** |
+## The evaluation, the baseline and the result
+
+**The metric.** A confident wrong answer is the worst mistake (the player pays for something invented), an answer without a source is next, and a refusal is the cheapest. The system is evaluated on **30 questions written before it was built**, in 8 types: facts (11), changes over time (4), filtered by playtime or Steam Deck (2), comparisons (3), scarce evidence (2), recent games and content (2), hard cases (2), and **4 out-of-scope questions** the reviews cannot answer. Each has an expected answer written from the reviews and 3 to 6 verified source reviews (`data/eval_questions.csv`). Answers are graded with a rubric fixed before reading them: 1 correct, 0.5 partial, 0 wrong or refused, plus flags for refusals and hallucinations.
+
+**The baseline** is the same LLM with no reviews, given the same "say you don't know instead of guessing" instruction.
+
+| | RAG system | LLM alone (baseline) |
 |---|---|---|
-| **The core** | A model you train and evaluate: a text classifier, a rating predictor, a topic or aspect model | An LLM application: RAG over documents, an agent with tools, structured extraction at scale |
-| **From the course** | Week 7: TF-IDF, embeddings, fine-tuning; Week 5: pipelines, validation | Week 7: the OpenAI API, RAG; Week 8: agents and tools |
-| **The baseline** | A dummy model, then TF-IDF with a linear model | The LLM alone (no retrieval, no tools), or a keyword search |
-| **The evaluation** | A held-out test set, used once; the right metric for the decision | An evaluation set of at least 15 questions, written **before** you build, with the expected answer or source |
-| **Also report** | Training time and model size | The cost and the time per question |
-| **The app** | Loads the saved model and predicts for new text | Calls your pipeline and shows the answer with its sources |
+| **Answer score** (26 answerable questions) | **0.63** | 0.33 |
+| Correct / partial / wrong / refused | 8 / 17 / 0 / 1 | 4 / 9 / 1 / 12 |
+| Out-of-scope questions refused correctly | **4 of 4** | 3 of 4 |
+| Hallucinations | **0** | 0 |
+| Retrieval hit rate (top 5) | **0.85** (5 random chunks: 0.52) | — |
+| Invented citations | **0 of 30** | — |
 
-You may do both (for example, a sentiment model whose predictions feed an LLM summary), but one done well beats two done halfway. **The app is mandatory on both tracks.**
+| Question type | RAG | Baseline |
+|---|---|---|
+| Changes over time | 0.75 | 0.00 |
+| Scarce evidence (complaints) | 0.75 | 0.00 |
+| Comparisons | 0.67 | 0.33 |
+| Facts | 0.64 | 0.55 |
+| Filtered | 0.50 | 0.25 |
+| Hard cases | 0.50 | 0.50 |
+| Recent games and content | 0.50 | 0.00 |
 
-<br>
+The RAG system nearly doubles the baseline's score without losing its honesty. Question by question: 14 better, 8 the same, 4 worse. The gains are largest where the LLM alone knows nothing (its knowledge stops in August 2025); on famous older games, its own knowledge sometimes gave fuller answers than 5 retrieved chunks.
 
-## Choose your data
+**One design choice compared:** the game filter. Without it, the hit rate was the same (0.85), because every evaluation question names its game. It is kept because real users will not always name the game.
 
-The default dataset is **Amazon Reviews 2023**: real product reviews with a star rating, a title, the text and the product's description, from a research dataset published by the McAuley Lab at UC San Diego. Read [`data/README.md`](data/README.md) for the fields, the categories, the traps to watch for, and how to cite it.
+## Where it goes wrong
 
-```bash
-python download_data.py                                  # Amazon reviews, Health_and_Personal_Care (the default), 345 MB
-python download_data.py amazon --category Gift_Cards     # another category, listed in data/README.md
-python download_data.py clothing                         # option 2: women's clothing reviews, public domain
-```
+Of the 18 imperfect answers, **12 are retrieval failures** (the evidence was not among the 5 chunks) and **6 are generation failures** (the evidence was there, but the answer missed or misused it):
+- **Minority views are crowded out:** a few dissenting reviews rarely make the top 5 among hundreds of positive ones.
+- **Embeddings find the topic, not the angle or the sentiment:** "complaints about Spider-Man" retrieves positive reviews of Spider-Man.
+- **Reasoning about time and evidence:** a player's anticipation ("can't wait for the DLC") presented as the DLC's reception; reviews from 2023 used as evidence that problems "still" exist.
+- **Variability:** the same question, with the same retrieved reviews, can get different answers on two runs.
 
-The Amazon data has no stated licence: it is published for research, and you must cite it (the reference is in the data guide) and never commit it. The second option, **23,000 women's clothing reviews** released into the public domain, is smaller and licence-clear.
+**Do not trust it for:** "Is there anything wrong with this game?" questions about well-liked games, specific angles (the late game, one mode), brand-new content, "is it still…?" questions, or any single answer without checking its sources. The full analysis is in `notebooks/03_evaluate.ipynb`.
 
-Files land in `data/raw/`, which is gitignored. **Do not commit data.** Anyone cloning your repo runs the same script.
+## Cost
 
-Some project ideas on this data:
+| | RAG system | LLM alone |
+|---|---|---|
+| Tokens per question (in / out) | 900 / 165 | 82 / 104 |
+| Cost per question | $0.00039 | $0.00015 |
+| Time per answer | 1.9 s (+ 16 ms retrieval) | 1.8 s |
 
-- **Model track:** classify reviews as negative, neutral or positive from the text alone, and route the negative ones to a support team; predict the star rating; detect which aspect a complaint is about (quality, delivery, price, side effects).
-- **LLM track:** *Ask the reviews*, a RAG assistant that answers questions about a product from its reviews and cites them; a product-comparison agent with a retrieval tool and a calculator; an extractor that turns thousands of reviews into a table of complaints, then summarises it.
+The whole evaluation (30 questions) cost about one cent. At **1,000 questions a day**, the LLM would cost about **$11.60 a month**. The index takes 309 MB on disk; retrieval runs locally, at no cost.
 
-> [!NOTE]
-> **Bringing your own data or topic?** You may, and you are graded on exactly the same rubric. You need a clear user and question, enough data for an honest evaluation (a few thousand labelled texts for the model track; a document collection and 15 test questions for the LLM track), and a licence that permits educational use. **No personal data** you are not allowed to process, and no confidential documents sent to an API. Clear it with your teacher on launch day, not on Wednesday.
+## Limitations
 
-<br>
+- **A small evaluation:** 30 questions, graded by one person, one run per question. Differences of a few points are not reliable, and per-type scores rest on 2 to 11 questions.
+- **The retrieval hit rate is approximate:** it uses patterns describing the expected evidence, which miss paraphrases and can match negations.
+- **The evaluation set informed one decision** (the game filter comparison), so that comparison is not fully independent.
+- **The data has blind spots:** English Steam reviews only (so the PC version), the newest reviews are under-represented, edited reviews show only their latest version, and bilingual reviews were removed.
+- **Re-collecting the data gives different reviews:** new reviews keep arriving and helpfulness rankings change, so a rebuilt index will differ from the evaluated one.
 
-## Day-by-day breakdown
+## Next steps
 
-Launch day (Friday of Week 8) is when you settle who you are working with, choose your track, data and user, create your repo, download the data and write your framing — so Monday starts with the data in front of you.
+1. **Improve retrieval**, which causes 12 of the 18 failures: hybrid search (keywords + embeddings) for names the embedding model does not know, retrieving more chunks and re-ranking them, and rewriting questions to capture their angle.
+2. **Give the model today's date and the collection date**, so it can judge how old its evidence is.
+3. **Refuse when the closest review is far from the question**, with a threshold chosen on new questions, not on the evaluation set.
+4. **Allow two games at once** for comparisons.
+5. **Evaluate more:** more questions, a second grader, several runs per question.
 
-### Day 1 — Data and baseline
+---
 
-- Finish **`01_framing_and_baseline.ipynb`**: what one row (or one document) is, data quality, and the distribution of what you predict or the kinds of questions you answer.
-- **Model track:** clean the text, define the target, **split once** (a fixed `random_state`, stratified), and score a dummy model and a TF-IDF baseline with cross-validation.
-- **LLM track:** prepare the documents (cleaning, chunking, metadata), write your **evaluation set** of at least 15 questions with the expected source of each answer, and score the baseline: the LLM alone, or a keyword search.
+## How to run it
 
-> [!TIP]
-> By the end of today you should be able to say your metric and your baseline score out loud. If you cannot, you are behind.
+**Requirements:** Python 3.12, conda (or another virtual environment), an OpenAI API key.
 
-### Day 2 — Build the core
-
-Today is the core engineering day, and the one the week turns on.
-
-- **Model track:** compare **at least three approaches** on the same validation folds or the same validation set — for example TF-IDF with a linear model, sentence embeddings with a classifier, and a fine-tuned DistilBERT or a zero-shot model — in **`02_build.ipynb`**. Track the runs with MLflow if you can.
-- **LLM track:** build the full pipeline end to end — retrieval with metadata, a grounded prompt that cites its sources and says "I don't know", or an agent with its tools — and run it on a few questions from your evaluation set.
-
-> [!IMPORTANT]
-> **Anyone without an end-to-end result on Tuesday evening has no Wednesday.** Everything after this builds on it.
-
-### Day 3 — Evaluate and improve
-
-- **Model track:** tune the best approach, choose the final one, **evaluate it once on the test set**, analyse the errors (confusion matrix, per-class results, examples of mistakes), and **save** it.
-- **LLM track:** run the **whole evaluation set**: retrieval hit rate, whether answers cite the right sources, whether out-of-scope questions are refused, the cost per question. Make **one improvement** (chunk size, a filter, a better prompt, a stronger embedding model) and measure it on the same set.
-- Write the results in **`03_evaluate.ipynb`**, your report.
-
-### Day 4 — The app and the story
-
-- Build the **Streamlit app** in `app/streamlit_app.py`: it loads your saved model (or builds your pipeline) once with `st.cache_resource`, takes the user's input, and shows the result. Keys go in `.streamlit/secrets.toml` or `.env`, **never in the code**.
-- Check that someone else can run it from a fresh clone by following your README.
-- Write your README, build your slides, and **rehearse once, timed**.
-- *Optional:* deploy the app on Streamlit Community Cloud.
-
-> [!NOTE]
-> **Notebook 03 is your report.** It is read on its own, by someone who has not seen notebooks 01 and 02: the question, the evidence, what you concluded and how far to trust it.
-
-<br>
-
-## Deliverables
-
-Your main deliverable is your GitHub repo, created from this template, containing:
-
-| Item | Description |
-|---|---|
-| `README.md` | Your project: the user and the question, the track, the data and its source, the baseline and the final result, the cost, the limitations, and **how to run the app**. Replace this brief with your own. |
-| `notebooks/01_framing_and_baseline.ipynb` | Framing, data, the split or the evaluation set, and the baseline. |
-| `notebooks/02_build.ipynb` | The approaches compared (model track) or the pipeline built (LLM track). |
-| `notebooks/03_evaluate.ipynb` | **The report.** The final evaluation, the error or failure analysis, the cost, and the limitations. |
-| `app/streamlit_app.py` | The app you demo. |
-| `src/functions.py` | Reusable functions, imported by the notebooks and the app. |
-| `requirements.txt` | Everything needed to run the notebooks and the app. |
-| Slides | Linked or committed in your README, so they can be read after the presentation. Any tool. |
-
-Saved models in `models/`, your `.env` file and `.streamlit/secrets.toml` are gitignored. The README says how to recreate the model and where to put the keys.
-
-### Minimum requirements
-
-Your project must meet all of these to pass:
-
-- **Framing** — a stated user, the question or decision your product supports, and a metric chosen for that decision.
-- **Baseline** — a simple alternative scored with the same evaluation as your final solution.
-- **Honest evaluation** — *model track:* at least 3 approaches compared on the same validation, and the final model evaluated once on a held-out test set; *LLM track:* an evaluation set of at least 15 questions written before building, with retrieval or tool use checked, citations checked, and out-of-scope questions tested.
-- **Failure analysis** — where and why it goes wrong, with examples.
-- **Cost** — *LLM track:* the cost per question; *model track:* the training time and the size of the model.
-- **A working app** — runs from a fresh clone by following the README, and uses your saved model or your pipeline.
-- **No secrets in git** — no API key anywhere in the history.
-
-The full grading rubric is in [`RUBRIC.md`](RUBRIC.md). Read it on launch day — it tells you exactly what is being evaluated.
-
-<br>
-
-## Advanced features (optional)
-
-Not required, but they will strengthen your project:
-
-- **Experiment tracking** — every run in MLflow, the final model registered and loaded by alias in the app.
-- **Both tracks** — a trained classifier that filters or routes reviews, and an LLM that summarises or answers from them.
-- **An LLM as a judge** — a second model that grades each answer against the expected one, checked by hand on a sample.
-- **Deployment** — the app live on Streamlit Community Cloud, with its keys in the platform's secrets.
-- **Monitoring** — a page in the app that shows the distribution of predictions or questions, and flags drift.
-- **Multimodal** — a photo or a voice question as input, with the cost measured.
-
-<br>
-
-## Coding best practices
-
-- **Modularise.** Logic in `src/functions.py`, imported by both the notebooks and the app. The notebook is for the narrative.
-- **One seed.** Define `RANDOM_STATE` once and pass it everywhere, so a second run gives the same numbers.
-- **One model name.** Define the LLM and the embedding model once; log the tokens of every call.
-- **Keys out of code.** `.env` locally, `st.secrets` in the app, both gitignored. Check `git status` before every commit.
-- **Restart and run all.** Before you commit a notebook, run it top to bottom on a fresh kernel.
-- **Commit often.** Small, frequent commits with descriptive messages.
-
-<br>
-
-## Presentation guidelines
-
-| Component | Duration |
-|---|---|
-| Talking with slides | 7 minutes |
-| Live demo of the app | 3 minutes |
-| **Total** | **10 minutes** |
-
-> [!IMPORTANT]
-> **You present from your own machine by sharing your screen.** The demo is your Streamlit app, running, on an example the audience can follow. Have it open and ready before your slot, with a second example in case the first one surprises you.
-
-### Suggested slide structure (~10 slides)
-
-1. **Title** — project title and your name or names.
-2. **The user and the problem** — who uses it, and what they decide with it.
-3. **The data** — source, what one row or document is, the traps you found.
-4. **The metric and the baseline** — why this metric, and the score to beat.
-5. **What you built** — the approaches compared, or the pipeline, in one diagram.
-6. **The result** — the final evaluation against the baseline.
-7. **Where it goes wrong** — the failure analysis, with examples.
-8. **Cost and limits** — what it costs to run, and where it should not be trusted.
-9. **Conclusions and next steps** — would you ship it, and what would you do next?
-10. **Closing** — project title, your name or names, thank you.
-
-<br>
-
-## Repo layout
-
-The notebooks are laid out in sections with the intent of each one written down, for both tracks, and `src/functions.py` and the app hold a few stubs that exist only to show the shape. **This is a place to start, not a template to fill in** — rename things, add sections, delete the ones for the other track. You are graded on the work, not on how closely you followed the scaffold.
-
-```
-.
-├── README.md                          this brief — replace it with your own
-├── RUBRIC.md                          how you are graded
-├── requirements.txt
-├── download_data.py                   fetches the reviews into data/raw/
-├── .env.example                       the keys you need, without their values
-├── data/
-│   ├── raw/                           downloaded data, gitignored
-│   └── README.md                      the dataset, its fields, its traps, how to cite it
-├── models/                            saved models and indexes, gitignored
-├── notebooks/
-│   ├── 01_framing_and_baseline.ipynb  frame, look, split or evaluation set, baseline
-│   ├── 02_build.ipynb                 compare approaches, or build the pipeline
-│   └── 03_evaluate.ipynb              evaluate, analyse failures, cost — the report
-├── app/
-│   └── streamlit_app.py               the app you demo
-└── src/
-    └── functions.py                   your reusable logic
-```
-
-## Getting set up
+### 1. Clone the repository and install the dependencies
 
 ```bash
-# 1. Click "Use this template" above, then clone YOUR new repo
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
-
-# 2. Install what you need (read the note at the top of requirements.txt first)
+git clone https://github.com/nachocarbovalle/IronHack-Final-Project-.git
+cd IronHack-Final-Project-
+conda create -n final-project python=3.12
+conda activate final-project
 pip install -r requirements.txt
+```
 
-# 3. LLM track: copy .env.example to .env and add your keys (never commit .env)
+### 2. Add your API key
+
+```bash
 cp .env.example .env
+```
 
-# 4. Download the data
-python download_data.py
+Open `.env` and set `OPENAI_API_KEY=` to your key (no quotes, no spaces). `.env` is gitignored: never commit it. For a deployment on Streamlit Community Cloud, put the key in the platform's secrets instead; the app reads it from `st.secrets` when `.env` is absent.
 
-# 5. Open the first notebook, and later run the app
-jupyter lab notebooks/01_framing_and_baseline.ipynb
+### 3. Collect the reviews
+
+The raw reviews are not in the repository (`data/raw/` is gitignored). Run the collection in `notebooks/00_api_test.ipynb`: it downloads the reviews of the 23 games in `data/games.csv` from the Steam API into `data/raw/steam_reviews/`, one Parquet file per game. Games already downloaded are skipped.
+
+### 4. Build the index
+
+Run `notebooks/02_build.ipynb` from top to bottom. It cleans and chunks the reviews with the functions in `src/functions.py`, embeds the chunks, and saves the index in `models/chroma/` and the configuration in `models/config.json` (both gitignored build artefacts). Embedding the 44,477 chunks takes about a minute and a half on a laptop.
+
+### 5. Run the app
+
+From the repository root:
+
+```bash
 streamlit run app/streamlit_app.py
 ```
 
-<br>
+The app has four pages:
+- **🏠 Home:** the project in one page.
+- **🎤 Presentation:** the project's slides, with charts built from the saved results in `data/results/`.
+- **🕹️ The games:** the 23 games, with their Steam banners and release dates.
+- **🎮 Ask the players:** the assistant. Pick a game, ask a question, and check the numbered sources under the answer. A warning appears when the closest review is far from the question (a display heuristic, not a validated threshold).
 
-## Tips for success
+Questions asked in the app are logged locally in `logs/questions.csv` (gitignored) for monitoring.
 
-1. **Choose your track, data and user on launch day.** Switching mid-week costs you time you do not have.
-2. **Write the evaluation before you build.** A test set or an evaluation set decided on Monday keeps you honest on Thursday.
-3. **Beat the baseline before you beat anyone else.** A fine-tuned transformer that does not beat TF-IDF, or a RAG system that does not beat the LLM alone, is a finding — say so.
-4. **Start the app on Wednesday evening**, even if it only shows a title and a text box. Apps always take longer than you think.
-5. **Watch the cost.** Use `gpt-5.4-nano` while you build, and log the tokens of every call.
-6. **Keep keys out of git.** One leaked key and the project stops while it is revoked.
-7. **Ask for help early.** Stuck for more than 30 minutes? Reach out to a classmate, your TA or your teacher.
-8. **Practise the demo out loud** at least once before Friday. Time yourselves.
-9. **Read [`RUBRIC.md`](RUBRIC.md).** It tells you exactly what is being evaluated.
+---
 
-Good luck. Build something you would trust someone else to use.
+## Repository layout
+
+```
+.
+├── README.md
+├── RUBRIC.md                       the project's grading rubric
+├── requirements.txt
+├── .env.example                    copy to .env and add your key
+├── .streamlit/config.toml          the app's theme
+├── app/
+│   └── streamlit_app.py            the app and the presentation
+├── data/
+│   ├── games.csv                   the 23 games: Steam app id, release date, banner URL
+│   ├── eval_questions.csv          the 30-question evaluation set
+│   ├── results/                    baseline and RAG answers, grades, failure analysis
+│   └── raw/                        the collected reviews (gitignored)
+├── models/                         Chroma index and config.json (gitignored, built by notebook 02)
+├── notebooks/
+│   ├── 00_api_test.ipynb           Steam API tests and review collection
+│   ├── 01_framing_and_baseline.ipynb   framing, data quality, cleaning, chunking, evaluation set, baseline
+│   ├── 02_build.ipynb              the index, retrieval, generation, the design choice, the saved version
+│   └── 03_evaluate.ipynb           the report: final evaluation, failures, cost, conclusions
+└── src/
+    └── functions.py                every reusable function, imported by the notebooks and the app
+```
+
+## Data and credits
+
+Reviews are written by Steam users and collected through Steam's public review API for an educational, non-commercial project; only the review text and aggregate fields are kept, never account identifiers. Game banners are displayed from Steam's servers and are not stored in this repository. Built with pandas, sentence-transformers, Chroma, the OpenAI API and Streamlit.
