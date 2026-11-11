@@ -1,0 +1,19 @@
+id,evidence_in_chunks,failure,note
+C1,1.0,retrieval,"False positive: 'instead of just copying it' is praise, not criticism"
+F1,1.0,retrieval,"False positive: the luck is in dialogue skill checks, not combat dice"
+F10,1.0,retrieval,False positive: the chunk says the game 'never crashed' (negation)
+F3,1.0,retrieval,"False positive: the matching chunk is a fan's view, not non-fans' reasons"
+F6,1.0,generation,"'Mixed' without landing the answer: for most, the pace is part of the appeal"
+F8,1.0,generation,Describes the parry system more than players' verdict
+R1,2.0,generation,"Solid, stealth, linear, AI; misses Bond feel and gadgets"
+R2,,generation,Leads with anticipation ('can't wait for the DLC') as evidence of reception
+T1,,generation,Time reasoning: uses 2023 reviews as evidence that problems 'still' exist
+T4,2.0,generation,"Frames it as general performance problems, not mainly mods"
+C2,0.0,retrieval,Not clearly better; misses 'depends on when'; cites a 0-hour review
+E2,0.0,retrieval,"Short story, dialogue; misses the MJ/Miles missions"
+F11,0.0,retrieval,"Mixed, story okay-ish; misses villain and formula"
+F2,0.0,retrieval,"Yes, with non-fans' view; misses God Mode, Hell Mode, caveats"
+F7,0.0,retrieval,Mods optional; misses the bug-fix minority
+H1,0.0,retrieval,"Story worth it, port issues don't harm it; no negative reviews retrieved"
+H2,0.0,retrieval,"Punishing, not a good introduction, hard but fair; thin"
+P1,0.0,retrieval,Honest refusal: no late-game chunks retrieved

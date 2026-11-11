@@ -20,6 +20,9 @@ mlflow.db
 # Jupyter
 .ipynb_checkpoints/
 */.ipynb_checkpoints/
+logs/
+.agents/
+.claude/
 
 # Python
 __pycache__/
